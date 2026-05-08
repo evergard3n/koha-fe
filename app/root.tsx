@@ -6,6 +6,8 @@ import {
   Scripts,
   ScrollRestoration,
 } from "react-router";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useRef } from "react";
 
 import type { Route } from "./+types/root";
 import "./app.css";
@@ -42,7 +44,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  return <Outlet />;
+  // useRef ensures a single QueryClient instance per component lifetime,
+  // which is SSR-safe (no shared state across requests).
+  const queryClientRef = useRef<QueryClient>(null);
+  if (!queryClientRef.current) {
+    queryClientRef.current = new QueryClient();
+  }
+
+  return (
+    <QueryClientProvider client={queryClientRef.current}>
+      <Outlet />
+    </QueryClientProvider>
+  );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

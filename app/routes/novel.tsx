@@ -7,6 +7,7 @@ import { Separator } from "~/components/ui/separator";
 import { useNovel } from "~/lib/queries/novels.queries";
 import { sanitizeNovelName } from "~/lib/utils/novel";
 import { Button } from "~/components/ui/button";
+import { useAuth } from "~/lib/auth-context";
 
 export function meta({ params }: { params: Record<string, string> }) {
   return [{ title: `${params.id} — Koha` }];
@@ -24,7 +25,9 @@ function ChapterListSkeleton() {
 
 export default function Novel() {
   const { id } = useParams<{ id: string }>();
-  const { data: novel, isLoading, isError } = useNovel(id ?? "");
+  const { status } = useAuth();
+  const canQuery = status === "authenticated";
+  const { data: novel, isLoading, isError } = useNovel(id ?? "", canQuery);
   const navigate = useNavigate();
 
   function handleBack() {
@@ -41,6 +44,16 @@ export default function Novel() {
       <SiteHeader />
 
       <main className="flex-1 mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-8 py-10">
+        {status === "loading" && (
+          <p className="text-muted-foreground text-sm">Checking session...</p>
+        )}
+
+        {status === "unauthenticated" && (
+          <p className="text-muted-foreground text-sm">log in to continue</p>
+        )}
+
+        {status === "authenticated" && (
+          <>
         <Button variant="ghost" size="icon" onClick={handleBack}>
           <ArrowLeft className="size-4" />
         </Button>
@@ -108,6 +121,8 @@ export default function Novel() {
               ))}
             </div>
           </div>
+        )}
+          </>
         )}
       </main>
     </div>

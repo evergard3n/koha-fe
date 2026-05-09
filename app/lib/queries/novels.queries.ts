@@ -22,40 +22,42 @@ export const novelKeys = {
   chapter: (id: string, hash: string) => [...novelKeys.detail(id), "chapter", hash] as const,
 };
 
-export function useNovels(params: GetNovelsParams = {}) {
+export function useNovels(params: GetNovelsParams = {}, enabled = true) {
   return useQuery({
     queryKey: novelKeys.list(params),
     queryFn: () => fetchNovels(params),
+    enabled,
   });
 }
 
-export function useSearchNovels(params: SearchNovelsParams) {
+export function useSearchNovels(params: SearchNovelsParams, enabled = true) {
   return useQuery({
     queryKey: novelKeys.search(params),
     queryFn: () => searchNovels(params),
-    enabled: params.q.trim().length > 0,
+    enabled: enabled && params.q.trim().length > 0,
   });
 }
 
-export function useNovelStatus() {
+export function useNovelStatus(enabled = true) {
   return useQuery({
     queryKey: novelKeys.status(),
     queryFn: fetchNovelStatus,
+    enabled,
   });
 }
 
-export function useNovel(id: string) {
+export function useNovel(id: string, enabled = true) {
   return useQuery({
     queryKey: novelKeys.detail(id),
     queryFn: () => fetchNovel({ id }),
-    enabled: id.length > 0,
+    enabled: enabled && id.length > 0,
   });
 }
 
-export function useChapter(id: string, hash: string) {
+export function useChapter(id: string, hash: string, enabled = true) {
   return useQuery({
     queryKey: novelKeys.chapter(id, hash),
     queryFn: () => fetchChapter({ id, hash }),
-    enabled: id.length > 0 && hash.length > 0,
+    enabled: enabled && id.length > 0 && hash.length > 0,
   });
 }

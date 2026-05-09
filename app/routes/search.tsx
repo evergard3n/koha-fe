@@ -3,6 +3,7 @@ import { SiteHeader } from "~/components/SiteHeader";
 import { NovelCard } from "~/components/NovelCard";
 import { Pagination } from "~/components/Pagination";
 import { Skeleton } from "~/components/ui/skeleton";
+import { useAuth } from "~/lib/auth-context";
 import { useSearchNovels } from "~/lib/queries/novels.queries";
 
 export function meta({ location }: { location: { search: string } }) {
@@ -27,8 +28,13 @@ export default function Search() {
   const [searchParams] = useSearchParams();
   const q = searchParams.get("q") ?? "";
   const page = Number(searchParams.get("page") ?? "1");
+  const { status } = useAuth();
+  const canQuery = status === "authenticated";
 
-  const { data, isLoading, isError, isFetching } = useSearchNovels({ q, page, pageSize: 18 });
+  const { data, isLoading, isError, isFetching } = useSearchNovels(
+    { q, page, pageSize: 18 },
+    canQuery
+  );
 
   const showLoading = isLoading || (isFetching && !data);
 
@@ -37,6 +43,16 @@ export default function Search() {
       <SiteHeader />
 
       <main className="flex-1 mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8 py-10">
+        {status === "loading" && (
+          <p className="text-muted-foreground text-sm">Checking session...</p>
+        )}
+
+        {status === "unauthenticated" && (
+          <p className="text-muted-foreground text-sm">log in to continue</p>
+        )}
+
+        {status === "authenticated" && (
+          <>
         <div className="mb-8 flex flex-col gap-1">
           <h1 className="font-serif text-4xl sm:text-5xl font-semibold text-foreground tracking-tight">
             {q ? (
@@ -86,6 +102,8 @@ export default function Search() {
               ))}
             </div>
             <Pagination meta={data.meta} />
+          </>
+        )}
           </>
         )}
       </main>

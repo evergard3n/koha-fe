@@ -8,6 +8,7 @@ import {
 } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useRef } from "react";
+import { AuthProvider } from "~/lib/auth-context";
 
 import type { Route } from "./+types/root";
 import "./app.css";
@@ -59,7 +60,9 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClientRef.current}>
-      <Outlet />
+      <AuthProvider>
+        <Outlet />
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

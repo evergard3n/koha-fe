@@ -6,6 +6,7 @@ import { Button } from "~/components/ui/button";
 import { Separator } from "~/components/ui/separator";
 import { Skeleton } from "~/components/ui/skeleton";
 import { useChapter, useNovel } from "~/lib/queries/novels.queries";
+import { useAuth } from "~/lib/auth-context";
 import { sanitizeNovelName } from "~/lib/utils/novel";
 import { cn } from "~/lib/utils";
 
@@ -15,8 +16,10 @@ export function meta({ params }: { params: Record<string, string> }) {
 
 export default function Chapter() {
   const { id, hash } = useParams<{ id: string; hash: string }>();
-  const { data: novel } = useNovel(id ?? "");
-  const { data: chapter, isLoading, isError } = useChapter(id ?? "", hash ?? "");
+  const { status } = useAuth();
+  const canQuery = status === "authenticated";
+  const { data: novel } = useNovel(id ?? "", canQuery);
+  const { data: chapter, isLoading, isError } = useChapter(id ?? "", hash ?? "", canQuery);
 
   const chapters = novel?.chapters ?? [];
   const currentIndex = chapters.findIndex((c) => c.hash === hash);
@@ -95,6 +98,16 @@ export default function Chapter() {
 
       {/* Reading area */}
       <main className="flex-1 mx-auto w-full max-w-2xl px-4 sm:px-6 py-12">
+        {status === "loading" && (
+          <p className="text-muted-foreground text-sm">Checking session...</p>
+        )}
+
+        {status === "unauthenticated" && (
+          <p className="text-muted-foreground text-sm">log in to continue</p>
+        )}
+
+        {status === "authenticated" && (
+          <>
         {isLoading && (
           <div className="flex flex-col gap-4">
             <Skeleton className="h-8 w-2/3 rounded" />
@@ -164,6 +177,8 @@ export default function Chapter() {
               </Button>
             )}
           </div>
+        )}
+          </>
         )}
       </main>
     </div>

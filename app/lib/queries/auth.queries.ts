@@ -6,7 +6,12 @@ import {
   refreshAuthSession,
   signupUser,
 } from "~/lib/services/auth.service";
-import type { LoginBody, SignupBody } from "~/lib/interfaces/auth.interface";
+import type {
+  LoginBody,
+  LogoutBody,
+  RefreshAuthSessionBody,
+  SignupBody,
+} from "~/lib/interfaces/auth.interface";
 
 export const authKeys = {
   all: ["auth"] as const,
@@ -27,13 +32,13 @@ export function useLogin() {
 
 export function useRefreshAuthSession() {
   return useMutation({
-    mutationFn: refreshAuthSession,
+    mutationFn: (body: RefreshAuthSessionBody) => refreshAuthSession(body),
   });
 }
 
 export function useLogout() {
   return useMutation({
-    mutationFn: logoutUser,
+    mutationFn: (body: LogoutBody) => logoutUser(body),
   });
 }
 

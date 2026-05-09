@@ -1,5 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { clearAuthSession, getCurrentUser, setAuthSession } from "~/lib/auth-session";
+import {
+  clearAuthSession,
+  getCurrentUser,
+  getRefreshToken,
+  setAuthSession,
+} from "~/lib/auth-session";
 import { loginUser, logoutUser, refreshAuthSession } from "~/lib/services/auth.service";
 import type { UserPublic } from "~/lib/interfaces/auth.interface";
 
@@ -21,11 +26,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    const hydrateFromCookie = async () => {
+    const hydrateFromRefreshToken = async () => {
+      const refreshToken = getRefreshToken();
+      if (!refreshToken) {
+        clearAuthSession();
+        setUser(null);
+        setStatus("unauthenticated");
+        return;
+      }
+
       try {
-        const session = await refreshAuthSession();
+        const session = await refreshAuthSession({ refreshToken });
         if (!mounted) return;
-        setAuthSession(session.accessToken, session.user);
+        setAuthSession(session.accessToken, session.refreshToken, session.user);
         setUser(session.user);
         setStatus("authenticated");
       } catch {
@@ -36,7 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    void hydrateFromCookie();
+    void hydrateFromRefreshToken();
 
     return () => {
       mounted = false;
@@ -45,14 +58,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (username: string, password: string) => {
     const session = await loginUser({ username, password });
-    setAuthSession(session.accessToken, session.user);
+    setAuthSession(session.accessToken, session.refreshToken, session.user);
     setUser(session.user);
     setStatus("authenticated");
   }, []);
 
   const logout = useCallback(async () => {
+    const refreshToken = getRefreshToken();
+
     try {
-      await logoutUser();
+      if (refreshToken) {
+        await logoutUser({ refreshToken });
+      }
     } finally {
       clearAuthSession();
       setUser(null);

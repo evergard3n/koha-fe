@@ -49,8 +49,8 @@ Implement clients with `fetch`/`axios`: check `success`, then read `data` or `er
 ### Refresh token
 
 - **Lifetime:** ~30 days.
-- **Storage:** `HttpOnly` cookie named `koha_refresh_token`; not readable by frontend JS.
-- **Use:** `POST /api/v1/auth/refresh` with `credentials: 'include'` to obtain a new access token. The backend validates + rotates the refresh cookie.
+- **Storage:** Returned in JSON body (never HTTP-only cookie in current API).
+- **Use:** `POST /api/v1/auth/refresh` with `{ "refreshToken": "…" }` to obtain a **new** access + refresh pair (refresh token is **rotated** server-side).
 
 ### User profile shape (`UserPublic`)
 
@@ -68,19 +68,19 @@ Implement clients with `fetch`/`axios`: check `success`, then read `data` or `er
 
 ## Public vs protected
 
-| Area                   | Auth required                  |
-| ---------------------- | ------------------------------ |
-| `/api/v1/health`       | No                             |
-| `/api/v1/` (root ping) | No                             |
-| `/api/v1/auth/*`       | No (refresh/logout use cookie) |
-| `/api/v1/users/me`     | Yes — Bearer access token      |
-| `/api/v1/novels/*`     | Yes — Bearer access token      |
+| Area                   | Auth required                                                 |
+| ---------------------- | ------------------------------------------------------------- |
+| `/api/v1/health`       | No                                                            |
+| `/api/v1/` (root ping) | No                                                            |
+| `/api/v1/auth/*`       | No (except logically you send refresh body on refresh/logout) |
+| `/api/v1/users/me`     | Yes — Bearer access token                                     |
+| `/api/v1/novels/*`     | Yes — Bearer access token                                     |
 
 ---
 
 ## Environment (server)
 
-Frontend only needs **`CORS_ORIGIN`** matching its own origin when calling from a browser — set on the server. Auth cookie calls require `credentials: 'include'` on the frontend. Other vars (`ROOT_FOLDER_PATH`, `DB_PATH`, JWT secrets) are server-only.
+Frontend only needs **`CORS_ORIGIN`** matching its own origin when calling from a browser — set on the server. Other vars (`ROOT_FOLDER_PATH`, `DB_PATH`, JWT secrets) are server-only.
 
 ---
 
@@ -133,7 +133,7 @@ Indexer/process health snapshot.
 
 **Rules:** Username is normalized (trimmed, lowercased). Allowed pattern: **`^[a-z0-9_]{3,30}$`**.
 
-**200 `data`** — same as login (see below). Also sets `Set-Cookie: koha_refresh_token=...; HttpOnly; Path=/api/v1/auth; ...`.
+**200 `data`** — same as login (see below).
 
 **409** — username already taken.
 
@@ -155,6 +155,7 @@ Indexer/process health snapshot.
 ```json
 {
   "accessToken": "<jwt>",
+  "refreshToken": "<opaque>",
   "user": {
     "id": "…",
     "username": "reader42",
@@ -165,22 +166,19 @@ Indexer/process health snapshot.
 
 **401** — bad credentials.
 
-**Cookie side effect:** sets/rotates `koha_refresh_token` as an `HttpOnly` cookie scoped to `/api/v1/auth`.
-
 ---
 
 ### `POST /api/v1/auth/refresh`
 
-**Request:** no body required. Browser must send cookie:
+**Body**
 
-```js
-fetch("/api/v1/auth/refresh", {
-  method: "POST",
-  credentials: "include",
-});
+```json
+{
+  "refreshToken": "<previous refresh token>"
+}
 ```
 
-**200 `data`** — same shape as login (`accessToken`, `user`). Old refresh row is invalidated and backend sets a rotated `koha_refresh_token` cookie.
+**200 `data`** — same shape as login (`accessToken`, `refreshToken`, `user`). Old refresh row is invalidated; always store the **new** `refreshToken`.
 
 **401** — invalid/expired/reused refresh token.
 
@@ -188,7 +186,13 @@ fetch("/api/v1/auth/refresh", {
 
 ### `POST /api/v1/auth/logout`
 
-**Request:** no body required. Browser must send cookie with `credentials: 'include'`.
+**Body**
+
+```json
+{
+  "refreshToken": "…"
+}
+```
 
 **200 `data`**
 
@@ -196,7 +200,7 @@ fetch("/api/v1/auth/refresh", {
 { "ok": true }
 ```
 
-Clears that refresh token server-side, clears `koha_refresh_token`, and frontend should drop the in-memory access token.
+Clears that refresh token server-side; drop tokens locally as well.
 
 ---
 
@@ -321,23 +325,21 @@ Chapter body (Markdown). `hash` is the 8-char id from the chapter list.
 
 ## Suggested frontend flow
 
-1. **Login or signup** with `credentials: 'include'` → backend stores refresh token in `HttpOnly` cookie; response gives `accessToken` + `user`.
-2. **Keep access token in memory** (or short-lived app state). Do not store refresh token in JS storage.
-3. **Attach** `Authorization: Bearer ${accessToken}` to **`/api/v1/novels/*`** and **`/api/v1/users/me`**.
-4. **On app reload**, call **`/api/v1/auth/refresh`** with `credentials: 'include'` → get new `accessToken` + `user`.
-5. **On 401** from a protected route, call refresh once, replace access token, retry once.
-6. **Logout:** call **`/api/v1/auth/logout`** with `credentials: 'include'`, then clear access token locally.
+1. **Login or signup** → persist `refreshToken` (e.g. `localStorage` or secure storage); keep `accessToken` in memory or short-lived storage.
+2. **Attach** `Authorization: Bearer ${accessToken}` to **`/api/v1/novels/*`** and **`/api/v1/users/me`**.
+3. **On 401** from a protected route, call **`/api/v1/auth/refresh`** with stored refresh token → replace **both** tokens → retry once.
+4. **Logout:** call **`/api/v1/auth/logout`** with current refresh token, then clear tokens locally.
 
 ---
 
 ## CORS
 
-Server uses `@fastify/cors` with `credentials: true`. Your SPA origin must match `CORS_ORIGIN`; frontend cookie calls must use `credentials: 'include'`.
+Server uses `@fastify/cors` with `CORS_ORIGIN` from `.env`. Your SPA origin must match what the backend allows.
 
 ---
 
 ## Changelog (recent)
 
 - **Drizzle + SQLite migrations** applied at server startup (`drizzle/migrations`).
-- **Auth:** username/password, in-memory access JWT + `HttpOnly` refresh cookie with DB-backed rotation.
+- **Auth:** username/password, JWT access + DB-backed refresh rotation.
 - **`/api/v1/novels/*`:** requires valid **Bearer access token** on every novels route.

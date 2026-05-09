@@ -2,7 +2,9 @@ import apiClient from "~/lib/axios";
 import type {
   AuthSessionData,
   LoginBody,
+  LogoutBody,
   LogoutData,
+  RefreshAuthSessionBody,
   SignupBody,
   UserPublic,
 } from "~/lib/interfaces/auth.interface";
@@ -17,13 +19,15 @@ export async function loginUser(body: LoginBody): Promise<AuthSessionData> {
   return data as AuthSessionData;
 }
 
-export async function refreshAuthSession(): Promise<AuthSessionData> {
-  const { data } = await apiClient.post("/auth/refresh");
+export async function refreshAuthSession(
+  body: RefreshAuthSessionBody
+): Promise<AuthSessionData> {
+  const { data } = await apiClient.post("/auth/refresh", body);
   return data as AuthSessionData;
 }
 
-export async function logoutUser(): Promise<LogoutData> {
-  const { data } = await apiClient.post("/auth/logout");
+export async function logoutUser(body: LogoutBody): Promise<LogoutData> {
+  const { data } = await apiClient.post("/auth/logout", body);
   return data as LogoutData;
 }
 

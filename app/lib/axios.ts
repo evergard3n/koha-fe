@@ -1,6 +1,11 @@
 import axios from "axios";
 import type { InternalAxiosRequestConfig } from "axios";
-import { clearAuthSession, getAccessToken, setAuthSession } from "~/lib/auth-session";
+import {
+  clearAuthSession,
+  getAccessToken,
+  getRefreshToken,
+  setAuthSession,
+} from "~/lib/auth-session";
 import { ApiError } from "~/lib/interfaces/common.interface";
 import type { ApiSuccess, ApiErrorResponse } from "~/lib/interfaces/common.interface";
 import type { AuthSessionData } from "~/lib/interfaces/auth.interface";
@@ -15,11 +20,15 @@ const baseURL = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 let refreshPromise: Promise<string> | null = null;
 
 async function performTokenRefresh(): Promise<string> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) {
+    throw new ApiError(401, "Missing refresh token");
+  }
+
   const response = await axios.post<ApiSuccess<AuthSessionData> | ApiErrorResponse>(
     `${baseURL}/auth/refresh`,
-    undefined,
+    { refreshToken },
     {
-      withCredentials: true,
       headers: {
         "Content-Type": "application/json",
       },
@@ -31,13 +40,12 @@ async function performTokenRefresh(): Promise<string> {
     throw new ApiError(body.error.statusCode, body.error.message);
   }
 
-  setAuthSession(body.data.accessToken, body.data.user);
+  setAuthSession(body.data.accessToken, body.data.refreshToken, body.data.user);
   return body.data.accessToken;
 }
 
 const apiClient = axios.create({
   baseURL,
-  withCredentials: true,
   headers: {
     "Content-Type": "application/json",
   },

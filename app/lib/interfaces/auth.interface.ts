@@ -14,8 +14,17 @@ export interface LoginBody {
   password: string;
 }
 
+export interface RefreshAuthSessionBody {
+  refreshToken: string;
+}
+
+export interface LogoutBody {
+  refreshToken: string;
+}
+
 export interface AuthSessionData {
   accessToken: string;
+  refreshToken: string;
   user: UserPublic;
 }
 

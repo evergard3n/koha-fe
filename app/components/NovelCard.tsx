@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { BookOpen } from "lucide-react";
 import { Card, CardContent } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
@@ -10,8 +10,17 @@ interface NovelCardProps {
 }
 
 export function NovelCard({ novel }: NovelCardProps) {
+  const [searchParams] = useSearchParams();
+  const page = Number(searchParams.get("page") ?? "1");
+  function handleSavePageToSessionStorage() {
+    sessionStorage.setItem("page", String(page));
+  }
   return (
-    <Link to={`/${novel.id}`} className="group block focus:outline-none">
+    <Link
+      to={`/${novel.id}`}
+      className="group block focus:outline-none"
+      onClick={handleSavePageToSessionStorage}
+    >
       <Card className="h-full bg-card border-border transition-all duration-200 group-hover:border-primary/50 group-hover:bg-accent group-focus-visible:ring-2 group-focus-visible:ring-primary/50">
         <CardContent className="flex flex-col gap-3 p-5 h-full">
           <div className="flex items-start justify-between gap-3">
@@ -21,7 +30,10 @@ export function NovelCard({ novel }: NovelCardProps) {
           </div>
           <div className="mt-auto flex items-center gap-1.5 text-muted-foreground">
             <BookOpen className="size-3.5 shrink-0" />
-            <Badge variant="secondary" className="text-xs font-sans font-normal px-1.5 py-0">
+            <Badge
+              variant="secondary"
+              className="text-xs font-sans font-normal px-1.5 py-0"
+            >
               {novel.chapters} {novel.chapters === 1 ? "chapter" : "chapters"}
             </Badge>
           </div>

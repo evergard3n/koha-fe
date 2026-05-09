@@ -1,0 +1,9 @@
+services:
+  koha-fe:
+    build: .
+    container_name: koha-fe
+    restart: unless-stopped
+    ports:
+      - "3006:3000"
+    environment:
+      NODE_ENV: production

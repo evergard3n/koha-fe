@@ -1,4 +1,4 @@
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { ArrowLeft, BookOpen, Hash } from "lucide-react";
 import { SiteHeader } from "~/components/SiteHeader";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -6,6 +6,7 @@ import { Badge } from "~/components/ui/badge";
 import { Separator } from "~/components/ui/separator";
 import { useNovel } from "~/lib/queries/novels.queries";
 import { sanitizeNovelName } from "~/lib/utils/novel";
+import { Button } from "~/components/ui/button";
 
 export function meta({ params }: { params: Record<string, string> }) {
   return [{ title: `${params.id} — Koha` }];
@@ -24,19 +25,25 @@ function ChapterListSkeleton() {
 export default function Novel() {
   const { id } = useParams<{ id: string }>();
   const { data: novel, isLoading, isError } = useNovel(id ?? "");
+  const navigate = useNavigate();
+
+  function handleBack() {
+    const page = sessionStorage.getItem("page");
+    if (page) {
+      navigate(`/?page=${page}`);
+    } else {
+      navigate("/");
+    }
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <SiteHeader />
 
       <main className="flex-1 mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-8 py-10">
-        <Link
-          to="/"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-8 group"
-        >
-          <ArrowLeft className="size-3.5 transition-transform group-hover:-translate-x-0.5" />
-          All novels
-        </Link>
+        <Button variant="ghost" size="icon" onClick={handleBack}>
+          <ArrowLeft className="size-4" />
+        </Button>
 
         {isLoading && (
           <div className="flex flex-col gap-6">
@@ -59,8 +66,12 @@ export default function Novel() {
               </h1>
               <div className="flex items-center gap-2">
                 <BookOpen className="size-4 text-muted-foreground" />
-                <Badge variant="secondary" className="font-sans font-normal text-xs">
-                  {novel.chapters.length} {novel.chapters.length === 1 ? "chapter" : "chapters"}
+                <Badge
+                  variant="secondary"
+                  className="font-sans font-normal text-xs"
+                >
+                  {novel.chapters.length}{" "}
+                  {novel.chapters.length === 1 ? "chapter" : "chapters"}
                 </Badge>
               </div>
             </div>
@@ -73,7 +84,9 @@ export default function Novel() {
               </h2>
 
               {novel.chapters.length === 0 && (
-                <p className="text-sm text-muted-foreground">No chapters available yet.</p>
+                <p className="text-sm text-muted-foreground">
+                  No chapters available yet.
+                </p>
               )}
 
               {novel.chapters.map((chapter) => (
@@ -84,7 +97,9 @@ export default function Novel() {
                 >
                   <Hash className="size-3.5 text-muted-foreground shrink-0" />
                   <span className="flex-1 text-sm text-foreground group-hover:text-primary transition-colors truncate">
-                    {chapter.filename.replace(/\.md$/i, "").replace(/[-_]/g, " ")}
+                    {chapter.filename
+                      .replace(/\.md$/i, "")
+                      .replace(/[-_]/g, " ")}
                   </span>
                   <span className="text-xs text-muted-foreground tabular-nums shrink-0">
                     {chapter.index}

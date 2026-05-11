@@ -12,6 +12,7 @@ export interface Novel {
 export interface Chapter {
   hash: string;
   filename: string;
+  mimeType: string;
   index: number;
 }
 

@@ -1,345 +1,250 @@
-# Koha Backend API — frontend reference
+# API Reference — koha-be
 
-Serve this Fastify app (default **`http://localhost:3000`** unless you configure another host/port). All **versioned REST** routes live under **`/api/v1`**.
-
-Interactive docs: **`GET /documentation`** (Swagger UI). OpenAPI is generated from the same route schemas described here.
+Base path: `/api/v1`  
+All responses are wrapped: `{ success: true, data: ... }` or `{ success: false, error: { statusCode, message } }`  
+Protected routes require: `Authorization: Bearer <accessToken>`
 
 ---
 
-## Response envelope
+## Auth
 
-Every JSON response uses one of these shapes:
+### POST /auth/signup
 
-**Success**
+Create account.
 
+**Body**
 ```json
-{
-  "success": true,
-  "data": {}
-}
+{ "username": "reader42", "password": "secret123" }
 ```
-
-**Error**
-
-```json
-{
-  "success": false,
-  "error": {
-    "statusCode": 401,
-    "message": "…"
-  }
-}
-```
-
-Implement clients with `fetch`/`axios`: check `success`, then read `data` or `error`.
-
----
-
-## Authentication
-
-### Access token (JWT)
-
-- **Lifetime:** ~15 minutes (short-lived access JWT).
-- **Send on protected requests:** HTTP header
-
-  `Authorization: Bearer <accessToken>`
-
-- **Payload:** `sub` = user UUID (you normally only need the opaque token).
-
-### Refresh token
-
-- **Lifetime:** ~30 days.
-- **Storage:** Returned in JSON body (never HTTP-only cookie in current API).
-- **Use:** `POST /api/v1/auth/refresh` with `{ "refreshToken": "…" }` to obtain a **new** access + refresh pair (refresh token is **rotated** server-side).
-
-### User profile shape (`UserPublic`)
-
-```json
-{
-  "id": "<uuid>",
-  "username": "reader42",
-  "avatar": null
-}
-```
-
-`avatar` may be `null` or a string URL/path depending on future use.
-
----
-
-## Public vs protected
-
-| Area                   | Auth required                                                 |
-| ---------------------- | ------------------------------------------------------------- |
-| `/api/v1/health`       | No                                                            |
-| `/api/v1/` (root ping) | No                                                            |
-| `/api/v1/auth/*`       | No (except logically you send refresh body on refresh/logout) |
-| `/api/v1/users/me`     | Yes — Bearer access token                                     |
-| `/api/v1/novels/*`     | Yes — Bearer access token                                     |
-
----
-
-## Environment (server)
-
-Frontend only needs **`CORS_ORIGIN`** matching its own origin when calling from a browser — set on the server. Other vars (`ROOT_FOLDER_PATH`, `DB_PATH`, JWT secrets) are server-only.
-
----
-
-## Endpoints
-
-### `GET /api/v1/`
-
-Lightweight ping (hidden from Swagger UI in some setups).
+- `username`: 3–30 chars, lowercase letters / digits / underscore only
+- `password`: min 8 chars
 
 **200**
-
-```json
-{ "success": true, "data": { "root": true } }
-```
-
----
-
-### `GET /api/v1/health`
-
-Indexer/process health snapshot.
-
-**200 `data`** (illustrative)
-
-```json
-{
-  "status": "ready",
-  "cachedNovels": 12,
-  "lastIndexed": "2026-05-09T05:47:51.059Z",
-  "isScanning": false,
-  "uptime": 3600.5,
-  "memory": { "rss": 80.1, "heapUsed": 35.2, "heapTotal": 42.0 },
-  "nodeVersion": "v22.x.y"
-}
-```
-
-`status`: `"starting"` | `"scanning"` | `"ready"`.
-
----
-
-### `POST /api/v1/auth/signup`
-
-**Body**
-
-```json
-{
-  "username": "reader42",
-  "password": "at_least_8_chars"
-}
-```
-
-**Rules:** Username is normalized (trimmed, lowercased). Allowed pattern: **`^[a-z0-9_]{3,30}$`**.
-
-**200 `data`** — same as login (see below).
-
-**409** — username already taken.
-
----
-
-### `POST /api/v1/auth/login`
-
-**Body**
-
-```json
-{
-  "username": "reader42",
-  "password": "…"
-}
-```
-
-**200 `data`**
-
 ```json
 {
   "accessToken": "<jwt>",
   "refreshToken": "<opaque>",
-  "user": {
-    "id": "…",
-    "username": "reader42",
-    "avatar": null
-  }
+  "user": { "id": "<uuid>", "username": "reader42", "avatar": null }
 }
 ```
 
-**401** — bad credentials.
+**Errors:** 400 (invalid input), 409 (username taken)
 
 ---
 
-### `POST /api/v1/auth/refresh`
+### POST /auth/login
 
 **Body**
-
 ```json
-{
-  "refreshToken": "<previous refresh token>"
-}
+{ "username": "reader42", "password": "secret123" }
 ```
 
-**200 `data`** — same shape as login (`accessToken`, `refreshToken`, `user`). Old refresh row is invalidated; always store the **new** `refreshToken`.
-
-**401** — invalid/expired/reused refresh token.
+**200** — same shape as signup  
+**Errors:** 401 (invalid credentials)
 
 ---
 
-### `POST /api/v1/auth/logout`
+### POST /auth/refresh
+
+Rotate refresh token. Old token is deleted; new pair issued.
 
 **Body**
-
 ```json
-{
-  "refreshToken": "…"
-}
+{ "refreshToken": "<opaque>" }
 ```
 
-**200 `data`**
+**200** — same shape as signup  
+**Errors:** 401 (invalid or expired token)
 
+---
+
+### POST /auth/logout
+
+Revoke refresh token server-side. Client should discard both tokens locally.
+
+**Body**
+```json
+{ "refreshToken": "<opaque>" }
+```
+
+**200**
 ```json
 { "ok": true }
 ```
 
-Clears that refresh token server-side; drop tokens locally as well.
+---
+
+## Users
+
+### GET /users/me 🔒
+
+**200**
+```json
+{ "id": "<uuid>", "username": "reader42", "avatar": null }
+```
+
+**Errors:** 401, 404
 
 ---
 
-### `GET /api/v1/users/me`
+## Novels
 
-**Headers:** `Authorization: Bearer <accessToken>`
+All novel routes require Bearer token.
 
-**200 `data`:** `UserPublic`
+### GET /novels/status 🔒
 
-**401** — missing/invalid access token.
+Background Drive indexer state.
 
-**404** — user id in JWT missing from DB (rare).
-
----
-
-### Novels (all require Bearer access token)
-
-**Headers:** `Authorization: Bearer <accessToken>` on every request below.
-
-**401** — missing/invalid/expired access token.
-
-#### `GET /api/v1/novels/status`
-
-Indexer state.
-
-**200 `data`**
-
+**200**
 ```json
 {
   "ready": true,
   "isScanning": false,
-  "lastIndexed": 1735123456789,
-  "total": 10
+  "lastIndexed": 1715000000000,
+  "total": 42
 }
 ```
-
-`lastIndexed` is Unix ms or `null` before first completed scan.
+- `ready`: false until the first scan completes after startup
+- `lastIndexed`: unix ms, null before first scan
 
 ---
 
-#### `GET /api/v1/novels`
+### GET /novels 🔒
 
-Paginated catalog (only novels with `chapters > 0` in the index).
+Paginated list of all novels with at least one chapter. Served from SQLite — no Drive API call.
 
-**Query:** `page` (default 1), `pageSize` (default 20, max 100).
+**Query**
+| Param | Type | Default | Max |
+|---|---|---|---|
+| `page` | integer | 1 | — |
+| `pageSize` | integer | 20 | 100 |
 
-**200 `data`**
-
+**200**
 ```json
 {
   "novels": [
-    {
-      "id": "ban-giao-hu-a1b2c3d4e5",
-      "name": "…",
-      "path": "…",
-      "chapters": 12
-    }
+    { "id": "ban-giao-hu-a1b2c3d4e5", "name": "Bản giao hưởng bánh ngọt", "path": "Bản_giao_hưởng_bánh_ngọt", "chapters": 12 }
   ],
-  "meta": {
-    "page": 1,
-    "pageSize": 20,
-    "total": 100,
-    "totalPages": 5
-  }
+  "meta": { "page": 1, "pageSize": 20, "total": 42, "totalPages": 3 }
 }
 ```
 
 ---
 
-#### `GET /api/v1/novels/search?q=`
+### GET /novels/search 🔒
 
-**Query:** `q` (required, non-empty searchable string), optional `page` / `pageSize`.
+Diacritic-insensitive name search (ă=a, ơ=o, etc.). Underscores and hyphens treated as spaces. Served from SQLite — no Drive API call.
 
-**200:** same list + `meta` shape as `GET /novels`.
+**Query**
+| Param | Type | Required | Default | Max |
+|---|---|---|---|---|
+| `q` | string | yes | — | — |
+| `page` | integer | no | 1 | — |
+| `pageSize` | integer | no | 20 | 100 |
 
-**400** — bad `q` (missing, blank, or no searchable chars).
+**200** — same shape as `GET /novels`  
+**Errors:** 400 (missing/blank/symbol-only `q`)
 
 ---
 
-#### `GET /api/v1/novels/:id`
+### GET /novels/:id 🔒
 
-Novel metadata + chapter list (`id` from list/search).
+Novel metadata + full chapter list.
 
-**200 `data`**
+**Caching:** makes one Drive `files.get` (metadata only) to compare `modifiedTime` against the cached value in SQLite. Cache hit → serve chapters from DB. Cache miss → fetch chapter list from Drive, update DB.
 
+**Path param**
+- `id` — stable novel ID, format: `<slug>-<sha256_prefix>` e.g. `ban-giao-hu-a1b2c3d4e5`
+
+**200**
 ```json
 {
-  "id": "…",
-  "name": "…",
+  "id": "ban-giao-hu-a1b2c3d4e5",
+  "name": "Bản giao hưởng bánh ngọt",
   "chapters": [
     {
       "hash": "a1b2c3d4",
-      "filename": "chapter-1.md",
+      "filename": "chapter-01.md",
+      "mimeType": "text/plain",
       "index": 1
+    },
+    {
+      "hash": "e5f6a7b8",
+      "filename": "volume-1.epub",
+      "mimeType": "application/epub+zip",
+      "index": 2
     }
   ]
 }
 ```
 
-**404** — unknown novel id.
+- `hash`: 8-char SHA-256 of the filename — stable URL key
+- `mimeType`: use this to select the correct content route below
+- `index`: 1-based natural sort order (numeric-aware)
+
+**Errors:** 404 (novel not found), 500 (Drive metadata call failed)
 
 ---
 
-#### `GET /api/v1/novels/:id/:hash`
+### GET /novels/:id/:hash 🔒
 
-Chapter body (Markdown). `hash` is the 8-char id from the chapter list.
+Fetch raw Markdown content for a `.md` chapter. Loads full file into memory from Drive (`alt=media`, `arraybuffer`). **Do not use for epub files.**
 
-**200 `data`**
+**Path params**
+- `id` — novel ID
+- `hash` — 8-char chapter hash from the chapter list
 
+**200**
 ```json
 {
   "hash": "a1b2c3d4",
-  "filename": "chapter-1.md",
+  "filename": "chapter-01.md",
+  "mimeType": "text/plain",
   "index": 1,
-  "content": "# …markdown…"
+  "content": "# Chapter 1\n\nLorem ipsum..."
 }
 ```
 
-**404** — novel or chapter not found.
+**Errors:** 400 (chapter is epub — use `/stream` instead), 401, 404, 500
 
 ---
 
-## Suggested frontend flow
+### GET /novels/:id/:hash/stream
 
-1. **Login or signup** → persist `refreshToken` (e.g. `localStorage` or secure storage); keep `accessToken` in memory or short-lived storage.
-2. **Attach** `Authorization: Bearer ${accessToken}` to **`/api/v1/novels/*`** and **`/api/v1/users/me`**.
-3. **On 401** from a protected route, call **`/api/v1/auth/refresh`** with stored refresh token → replace **both** tokens → retry once.
-4. **Logout:** call **`/api/v1/auth/logout`** with current refresh token, then clear tokens locally.
+Stream epub file content. **No auth required** — designed for epub reader libraries that load resources via plain URL.
+
+Supports HTTP range requests. Forward `Range` header to enable partial loading (epubjs does this automatically).
+
+**Path params**
+- `id` — novel ID
+- `hash` — 8-char chapter hash (must be an epub chapter)
+
+**Request headers**
+```
+Range: bytes=0-65535   (optional — omit for full download)
+```
+
+**200 / 206**
+```
+Content-Type: application/epub+zip
+Accept-Ranges: bytes
+Content-Range: bytes 0-65535/1048576   (only on 206)
+Content-Length: 65536                  (when available)
+<binary epub data>
+```
+
+**Errors:** 400 (chapter is not epub — use `/:id/:hash` for markdown), 404, 500
 
 ---
 
-## CORS
+## How to choose between the two chapter routes
 
-Server uses `@fastify/cors` with `CORS_ORIGIN` from `.env`. Your SPA origin must match what the backend allows.
+```
+chapter.mimeType === 'application/epub+zip'
+  → GET /novels/:id/:hash/stream   (binary stream, range-aware)
+  
+otherwise (.md or text/plain)
+  → GET /novels/:id/:hash          (JSON envelope, content string)
+```
 
----
-
-## Changelog (recent)
-
-- **Drizzle + SQLite migrations** applied at server startup (`drizzle/migrations`).
-- **Auth:** username/password, JWT access + DB-backed refresh rotation.
-- **`/api/v1/novels/*`:** requires valid **Bearer access token** on every novels route.
+The `mimeType` field in the chapter list (`GET /novels/:id`) is the canonical signal.

@@ -1,7 +1,10 @@
+import { useState, useEffect } from "react";
 import { Link, useParams } from "react-router";
 import { ArrowLeft, ArrowRight, BookOpen, ChevronLeft } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { ReactReader } from "react-reader";
+import axios from "axios";
 import { Button } from "~/components/ui/button";
 import { Separator } from "~/components/ui/separator";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -18,11 +21,42 @@ export default function Chapter() {
   const { id, hash } = useParams<{ id: string; hash: string }>();
   const { status } = useAuth();
   const canQuery = status === "authenticated";
+  const [mounted, setMounted] = useState(false);
+  const [epubLocation, setEpubLocation] = useState<string | number>(0);
+  const [epubBuffer, setEpubBuffer] = useState<ArrayBuffer | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const streamUrl = `${import.meta.env.VITE_API_BASE_URL ?? "/api/v1"}/novels/${id}/${hash}/stream`;
+
   const { data: novel } = useNovel(id ?? "", canQuery);
-  const { data: chapter, isLoading, isError } = useChapter(id ?? "", hash ?? "", canQuery);
 
   const chapters = novel?.chapters ?? [];
   const currentIndex = chapters.findIndex((c) => c.hash === hash);
+  const currentChapterMeta = chapters[currentIndex];
+  const isEpub = currentChapterMeta?.mimeType === "application/epub+zip";
+
+  useEffect(() => {
+    if (!mounted || !isEpub) return;
+    let cancelled = false;
+    axios
+      .get<ArrayBuffer>(streamUrl, { responseType: "arraybuffer" })
+      .then((res) => {
+        if (!cancelled) setEpubBuffer(res.data);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted, isEpub, streamUrl]);
+
+  const { data: chapter, isLoading, isError } = useChapter(
+    id ?? "",
+    hash ?? "",
+    canQuery && !isEpub,
+  );
+
   const prevChapter = currentIndex > 0 ? chapters[currentIndex - 1] : null;
   const nextChapter = currentIndex < chapters.length - 1 ? chapters[currentIndex + 1] : null;
 
@@ -49,7 +83,11 @@ export default function Chapter() {
             <Separator orientation="vertical" className="h-5 mx-1" />
 
             <span className="flex-1 text-sm text-muted-foreground truncate">
-              {chapter ? chapterLabel(chapter.filename) : "Loading…"}
+              {currentChapterMeta
+                ? chapterLabel(currentChapterMeta.filename)
+                : chapter
+                  ? chapterLabel(chapter.filename)
+                  : "Loading…"}
             </span>
 
             {/* Prev / Next icon buttons */}
@@ -108,7 +146,7 @@ export default function Chapter() {
 
         {status === "authenticated" && (
           <>
-        {isLoading && (
+        {isLoading && !isEpub && (
           <div className="flex flex-col gap-4">
             <Skeleton className="h-8 w-2/3 rounded" />
             <Skeleton className="h-4 w-full rounded" />
@@ -119,13 +157,29 @@ export default function Chapter() {
           </div>
         )}
 
-        {isError && (
+        {isError && !isEpub && (
           <p className="text-destructive text-sm text-center py-20">
             Chapter not found.
           </p>
         )}
 
-        {chapter && (
+        {isEpub ? (
+          <div className="h-[80vh]">
+            {mounted && epubBuffer ? (
+              <ReactReader
+                url={epubBuffer}
+                location={epubLocation}
+                locationChanged={(cfi: string) => setEpubLocation(cfi)}
+              />
+            ) : (
+              <div className="flex flex-col gap-4">
+                <Skeleton className="h-8 w-2/3 rounded" />
+                <Skeleton className="h-4 w-full rounded" />
+                <Skeleton className="h-4 w-full rounded" />
+              </div>
+            )}
+          </div>
+        ) : chapter ? (
           <article
             className="
               font-reading text-lg leading-loose text-foreground/90
@@ -147,10 +201,10 @@ export default function Chapter() {
               {chapter.content}
             </ReactMarkdown>
           </article>
-        )}
+        ) : null}
 
-        {/* Bottom chapter navigation */}
-        {chapter && (
+        {/* Bottom chapter navigation — only for markdown chapters */}
+        {chapter && !isEpub && (
           <div className="flex items-center justify-between gap-4 mt-16 pt-8 border-t border-border">
             {prevChapter ? (
               <Button variant="outline" size="sm" render={<Link to={`/${id}/${prevChapter.hash}`} />} className="gap-2">
